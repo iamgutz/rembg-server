@@ -7,6 +7,7 @@ class SmartCropper {
         const model = await cocoSsd.load();
         const decodedImage = tf.node.decodeImage(imageBuffer);
         const predictions = await model.detect(decodedImage);
+        console.log(predictions);
         return predictions;
     }
 
@@ -16,15 +17,15 @@ class SmartCropper {
         }
         const object = predictions[0]; // Assuming the first detected object is the desired one
         const image = sharp(imageBuffer);
-        const { width, height } = object.bbox;
+        const [x, y, width, height] = object.bbox;
 
         // Crop the image based on object bounding box
         const croppedImageBuffer = await image.extract({
-            left: object.bbox[0],
-            top: object.bbox[1],
-            width,
-            height,
-        }).toBugger();
+            left: Math.round(x),
+            top: Math.round(y),
+            width: Math.round(width),
+            height: Math.round(height),
+        }).toBuffer();
 
         return croppedImageBuffer;
     }
