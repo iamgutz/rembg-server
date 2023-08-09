@@ -1,11 +1,9 @@
 const express = require('express');
 const cors = require('cors');
-const { v4: uuidv4 } = require('uuid');
-const { Rembg } = require("rembg-node");
 const fs = require('fs');
 const path = require('path');
-const sharp = require("sharp");
-const axios = require('axios');
+const ImageProcessor = require('./modules/ImageProcessor');
+const SmartCropper = require('./modules/SmartCropper');
 
 const app = express();
 const PORT = 3005;
@@ -19,11 +17,6 @@ if (!fs.existsSync(processedImagesDir)) {
 app.use(cors()); // Use the cors middleware to enable CORS
 app.use(express.json()); // Use built-in express.json() middleware to parse JSON data
 
-const extractSkuFromImageUrl = (imageUrl) => {
-    const match = imageUrl.match(/\/s(\d+)-/);
-    return match ? match[1] : null;
-}
-
 app.post('/process', async (req, res) => {
     const { imageUrl } = req.body;
     console.log(imageUrl);
@@ -33,29 +26,11 @@ app.post('/process', async (req, res) => {
     }
 
     try {
-        // Download the image
-        const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-        const imageBuffer = Buffer.from(response.data);
-
-        // Process the image
-        const input = sharp(imageBuffer);
-        const rembg = new Rembg({
-            logging: true,
-        });
-        const output = await rembg.remove(input);
-
-        // this is to create image with the sku name and replace if already exists
-        // otherwise create with a unique id
-        const skuId = extractSkuFromImageUrl(imageUrl);
-        const imageId = skuId || uuidv4();
-        const imageFileName = `${imageId}.png`;
-        const imagePath = path.join(processedImagesDir, imageFileName);
-
-        //fs.writeFileSync(imagePath, output);
-        
-        // Save the processed image locally
-        await output.webp().toFile(imagePath);
-
+        const imageBuffer = await ImageProcessor.fetchImageUrl(imageUrl);
+        const predictions = await SmartCropper.detectObject(imageBuffer);
+        const croppedImageBuffer = await SmartCropper.cropImage(imageBuffer, predictions);
+        const outputImage = await ImageProcessor.removeBackground(croppedImageBuffer);
+        const imageFileName = await ImageProcessor.saveProcessedImage(imageUrl, outputImage, processedImagesDir);
         const imageServeUrl = `http://localhost:${PORT}/images/${imageFileName}`;
         res.json({ imageUrl: imageServeUrl });
     } catch (error) {
