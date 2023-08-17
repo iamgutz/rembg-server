@@ -2,7 +2,7 @@ const tf = require('@tensorflow/tfjs-node');
 const cocoSsd = require('@tensorflow-models/coco-ssd');
 const sharp = require('sharp');
 
-class SmartCropper {
+class TensorFlow {
     async detectObject(imageBuffer) {
         const model = await cocoSsd.load();
         const decodedImage = tf.node.decodeImage(imageBuffer);
@@ -11,7 +11,7 @@ class SmartCropper {
         return predictions;
     }
 
-    async cropImage(imageBuffer, predictions) {
+    async cropImage(imageBuffer, predictions, returnBuffer = true) {
         if (predictions.length === 0) {
             throw new Error('No objects detected.');
         }
@@ -25,10 +25,18 @@ class SmartCropper {
             top: Math.round(y),
             width: Math.round(width),
             height: Math.round(height),
-        }).toBuffer();
+        });
+
+        if (returnBuffer) {
+            return croppedImageBuffer.toBuffer();
+        }
 
         return croppedImageBuffer;
     }
 }
 
-module.exports = new SmartCropper();
+module.exports = new TensorFlow();
+
+// 1- explore image magic
+// 2- Rembg to find where the pixel starts
+

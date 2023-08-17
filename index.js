@@ -3,11 +3,15 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const ImageProcessor = require('./modules/ImageProcessor');
-const SmartCropper = require('./modules/SmartCropper');
+const TensorFlow = require('./modules/TensorFlow');
+const RemBg = require('./modules/RemBg');
+const ImageMagick = require('./modules/ImageMagick');
 
 const app = express();
 const PORT = 3005;
 const processedImagesDir = path.join(__dirname, 'processed_images');
+
+const getServerImageUrl = (imageFileName) => `http://localhost:${PORT}/images/${imageFileName}`;
 
 // Create the 'processed_images' folder if it doesn't exist
 if (!fs.existsSync(processedImagesDir)) {
@@ -17,7 +21,32 @@ if (!fs.existsSync(processedImagesDir)) {
 app.use(cors()); // Use the cors middleware to enable CORS
 app.use(express.json()); // Use built-in express.json() middleware to parse JSON data
 
-app.post('/process', async (req, res) => {
+app.post('/rembg', async (req, res) => {
+    const { imageUrl } = req.body;
+    console.log(imageUrl);
+
+    if (!imageUrl) {
+        return res.status(400).json({ error: 'Image URL not provided' });
+    }
+
+    const existingSkuImage = ImageProcessor.checkIfSkuImageExists(imageUrl, processedImagesDir);
+    if (existingSkuImage) {
+        return res.json({ imageUrl: getServerImageUrl(existingSkuImage) });
+    }
+
+    try {
+        const imageBuffer = await ImageProcessor.fetchImageUrl(imageUrl);
+        const imageWithOutBg = await RemBg.removeBackground(imageBuffer);
+        const imageFileName = await ImageProcessor.saveProcessedImage(imageUrl, imageWithOutBg, processedImagesDir);
+        const imageServeUrl = getServerImageUrl(imageFileName);
+        res.json({ imageUrl: imageServeUrl });
+    } catch (error) {
+        console.error('Error processing image: ', error);
+        res.status(500).json({ error: 'Error processing image' });
+    }
+});
+
+app.post('/tensorflow', async (req, res) => {
     const { imageUrl } = req.body;
     console.log(imageUrl);
 
@@ -27,11 +56,34 @@ app.post('/process', async (req, res) => {
 
     try {
         const imageBuffer = await ImageProcessor.fetchImageUrl(imageUrl);
-        const predictions = await SmartCropper.detectObject(imageBuffer);
-        const croppedImageBuffer = await SmartCropper.cropImage(imageBuffer, predictions);
-        const outputImage = await ImageProcessor.removeBackground(croppedImageBuffer);
-        const imageFileName = await ImageProcessor.saveProcessedImage(imageUrl, outputImage, processedImagesDir);
-        const imageServeUrl = `http://localhost:${PORT}/images/${imageFileName}`;
+        const predictions = await TensorFlow.detectObject(imageBuffer);
+        const imageRembgBuffer = await RemBg.removeBackground(imageBuffer, true);
+        const croppedImageBuffer = await TensorFlow.cropImage(imageRembgBuffer, predictions, false);
+        const imageFileName = await ImageProcessor.saveProcessedImage(imageUrl, croppedImageBuffer, processedImagesDir);
+        const imageServeUrl = getServerImageUrl(imageFileName);
+        res.json({ imageUrl: imageServeUrl });
+    } catch (error) {
+        console.error('Error processing image: ', error);
+        res.status(500).json({ error: 'Error processing image' });
+    }
+});
+
+app.post('/magick', async (req, res) => {
+    const { imageUrl } = req.body;
+    console.log(imageUrl);
+
+    if (!imageUrl) {
+        return res.status(400).json({ error: 'Image URL not provided' });
+    }
+
+    try {
+        const imageBuffer = await ImageProcessor.fetchImageUrl(imageUrl);
+        const croppedBuffer = await ImageMagick.cropBottom(imageBuffer);
+        const imageFileName = ImageProcessor.getNewImageFileName(imageUrl);
+        const imageFilePath = ImageProcessor.getNewImageFilePath(imageFileName, processedImagesDir);
+        // Save the cropped image to the specified path
+        fs.writeFileSync(imageFilePath, croppedBuffer);
+        const imageServeUrl = getServerImageUrl(imageFileName);
         res.json({ imageUrl: imageServeUrl });
     } catch (error) {
         console.error('Error processing image: ', error);

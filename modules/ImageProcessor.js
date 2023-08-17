@@ -1,14 +1,42 @@
 const { v4: uuidv4 } = require('uuid');
-const { Rembg } = require("rembg-node");
 const fs = require('fs');
 const path = require('path');
-const sharp = require("sharp");
 const axios = require('axios');
 
 class ImageProcessor {
     extractSkuFromImageUrl(imageUrl) {
         const match = imageUrl.match(/\/s(\d+)-/);
+        console.log(match);
         return match ? match[1] : null;
+    }
+
+    getNewImageFileName(imageUrl) {
+        // this is to create image with the sku name and replace if already exists
+        // otherwise create with a unique id
+        const skuId = this.extractSkuFromImageUrl(imageUrl);
+        const imageId = skuId || uuidv4();
+        const imageFileName = `${imageId}.png`;
+        return imageFileName
+    }
+
+    getNewImageFilePath(imageFileName, processedImagesDir) {
+        const imagePath = path.join(processedImagesDir, imageFileName);
+        return imagePath;
+    }
+
+    saveImageFile(imagePath, imageBuffer) {
+        fs.writeFileSync(imagePath, imageBuffer);
+    }
+
+    checkIfSkuImageExists(imageUrl, processedImagesDir) {
+        const skuId = this.extractSkuFromImageUrl(imageUrl);
+        const imageFileName = `${skuId}.png`;
+        const imagePath = path.join(processedImagesDir, imageFileName);
+        // Check if the processed image already exists
+        if (fs.existsSync(imagePath)) {
+            return imageFileName; // Return the existing image URL
+        }
+        return false;
     }
     
     async fetchImageUrl(imageUrl) {
@@ -18,28 +46,12 @@ class ImageProcessor {
         return imageBuffer;
     }
 
-    async removeBackground(imageBuffer) {
-        // Process the image
-        const input = sharp(imageBuffer);
-        const rembg = new Rembg({
-            logging: true,
-        });
-        const output = await rembg.remove(input);
-
-        return output;
-    }
-
-    async saveProcessedImage(imageUrl, outputImage, processedImagesDir) {
-        // this is to create image with the sku name and replace if already exists
-        // otherwise create with a unique id
-        const skuId = this.extractSkuFromImageUrl(imageUrl);
-        const imageId = skuId || uuidv4();
-        const imageFileName = `${imageId}.png`;
-        const imagePath = path.join(processedImagesDir, imageFileName);
-        //fs.writeFileSync(imagePath, output);
+    async saveProcessedImage(imageUrl, imageBuffer, processedImagesDir) {
+        const imageFileName = this.getNewImageFileName(imageUrl);
+        const imagePath = this.getNewImageFilePath(imageFileName, processedImagesDir);
         
         // Save the processed image locally
-        await outputImage.webp().toFile(imagePath);
+        await imageBuffer.webp().toFile(imagePath);
 
         return imageFileName;
     }
