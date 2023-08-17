@@ -91,6 +91,35 @@ app.post('/magick', async (req, res) => {
     }
 });
 
+// This endpoint combines the smart cropping and the remove of background processes
+app.post('/process-image', async (req, res) => {
+    const { imageUrl } = req.body;
+    console.log(imageUrl);
+
+    if (!imageUrl) {
+        return res.status(400).json({ error: 'Image URL not provided' });
+    }
+
+    const existingSkuImage = ImageProcessor.checkIfSkuImageExists(imageUrl, processedImagesDir);
+    if (existingSkuImage) {
+        return res.json({ imageUrl: getServerImageUrl(existingSkuImage) });
+    }
+
+    try {
+        const imageBuffer = await ImageProcessor.fetchImageUrl(imageUrl);
+        const croppedBuffer = await ImageMagick.cropBottom(imageBuffer);
+        const rembgBuffer = await RemBg.removeBackground(croppedBuffer);
+
+        // Save the cropped image to the specified path
+        const imageFileName = await ImageProcessor.saveProcessedImage(imageUrl, rembgBuffer, processedImagesDir);
+        const imageServeUrl = getServerImageUrl(imageFileName);
+        res.json({ imageUrl: imageServeUrl });
+    } catch (error) {
+        console.error('Error processing image: ', error);
+        res.status(500).json({ error: 'Error processing image' });
+    }
+});
+
 app.use('/images', express.static(processedImagesDir));
 
 app.listen(PORT, () => {

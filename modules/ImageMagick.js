@@ -5,8 +5,9 @@ class ImageMagick {
         return new Promise((resolve, reject) => {
             gm(inputBuffer)
                 .gravity('South')
-                .background('transparent')
                 .trim()
+                .extent(2000, 2000)
+                .background('white')
                 .toBuffer((err, croppedBuffer) => {
                     if (err) {
                         reject(err);
